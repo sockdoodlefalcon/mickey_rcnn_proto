@@ -3,3 +3,13 @@ logs/
 *.bat
 *.out
 
+# ignore cache files
+mrcnn/__pycache__/
+samples/mickey/__pycache__/
+
+# ignore jupyter checkpoints
+samples/mickey/.ipynb_checkpoints/
+
+# cannot check in base weight - too large
+mask_rcnn_coco.h5
+
