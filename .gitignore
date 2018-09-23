@@ -2,6 +2,7 @@ logs/
 *.log
 *.bat
 *.out
+.ipynb_checkpoints/
 
 # ignore cache files
 mrcnn/__pycache__/
