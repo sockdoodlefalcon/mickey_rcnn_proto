@@ -2166,6 +2166,9 @@ class MaskRCNN():
         optimizer = keras.optimizers.SGD(
             lr=learning_rate, momentum=momentum,
             clipnorm=self.config.GRADIENT_CLIP_NORM)
+
+        #optimizer=keras.optimizers.RMSprop(lr=learning_rate)
+
         # Add Losses
         # First, clear previously set losses to avoid duplication
         self.keras_model._losses = []
@@ -2639,7 +2642,7 @@ class MaskRCNN():
         # because Keras adds them automatically
         if isinstance(name, str):
             name = re.compile(name.replace("/", r"(\_\d+)*/"))
-
+        print('Looking for ', name)
         parents = tensor.op.inputs
         for p in parents:
             if p in checked:

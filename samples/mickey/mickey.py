@@ -1,10 +1,9 @@
 """
 Mask R-CNN
-Train on the toy Mickey dataset and implement color splash effect.
+Train on the toy Mickey dataset.
 
-Copyright (c) 2018 Matterport, Inc.
-Licensed under the MIT License (see LICENSE for details)
-Written by Waleed Abdulla
+Code modified for Mickey dataset from:
+https://github.com/matterport/Mask_RCNN/blob/master/samples/balloon/balloon.py
 
 ------------------------------------------------------------
 
@@ -12,13 +11,13 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
        the command line as such:
 
     # Train a new model starting from pre-trained COCO weights
-    python3 mickey.py train --dataset=/path/to/balloon/dataset --weights=coco
+    python3 mickey.py train --dataset=/path/to/mickey/dataset --weights=coco
 
     # Resume training a model that you had trained earlier
-    python3 mickey.py train --dataset=/path/to/balloon/dataset --weights=last
+    python3 mickey.py train --dataset=/path/to/mickey/dataset --weights=last
 
     # Train a new model starting from ImageNet weights
-    python3 mickey.py train --dataset=/path/to/balloon/dataset --weights=imagenet
+    python3 mickey.py train --dataset=/path/to/mickey/dataset --weights=imagenet
 
     # Apply color splash to an image
     python3 mickey.py splash --weights=/path/to/weights/file.h5 --image=<URL or path to file>
@@ -33,6 +32,9 @@ import json
 import datetime
 import numpy as np
 import skimage.draw
+
+import tensorflow as tf
+from keras.backend.tensorflow_backend import set_session
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -74,9 +76,6 @@ class MickeyConfig(Config):
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 100
 
-    # Skip detections with < 90% confidence
-    DETECTION_MIN_CONFIDENCE = 0.55
-
     # Size of the top-down layers used to build the feature pyramid
     TOP_DOWN_PYRAMID_SIZE = 256
 
@@ -87,28 +86,29 @@ class MickeyConfig(Config):
     # Length of square anchor side in pixels
     RPN_ANCHOR_SCALES = (32, 64, 128, 256, 512)
 
-    # Non-max suppression threshold to filter RPN proposals.
-    # You can increase this during training to generate more propsals.
-    RPN_NMS_THRESHOLD = 0.9
-
     # If enabled, resizes instance masks to a smaller size to reduce
     # memory load. Recommended when using high-resolution images.
     USE_MINI_MASK = False
     MINI_MASK_SHAPE = (56, 56)  # (height, width) of the mini-mask
 
+    # Skip detections with < % confidence
+    DETECTION_MIN_CONFIDENCE = 0.51
+
+    # Non-max suppression threshold to filter RPN proposals.
+    # You can increase this during training to generate more propsals.
+    RPN_NMS_THRESHOLD = 0.9
+
     # Number of ROIs per image to feed to classifier/mask heads
-    # The Mask RCNN paper uses 512 but often the RPN doesn't generate
-    # enough positive proposals to fill this and keep a positive:negative
-    # ratio of 1:3. You can increase the number of proposals by adjusting
-    # the RPN NMS threshold.
     TRAIN_ROIS_PER_IMAGE = 512
 
     # Percent of positive ROIs used to train classifier/mask heads
-    ROI_POSITIVE_RATIO = 1
+    ROI_POSITIVE_RATIO = 0.55
 
     # Non-maximum suppression threshold for detection
-    DETECTION_NMS_THRESHOLD = 0.3
+    DETECTION_NMS_THRESHOLD = 0.1
 
+    # Learning rate 
+    LEARNING_RATE = 0.000025
 
 ############################################################
 #  Dataset
@@ -129,20 +129,6 @@ class MickeyDataset(utils.Dataset):
         dataset_dir = os.path.join(dataset_dir, subset)
 
         # Load annotations
-        # VGG Image Annotator saves each image in the form:
-        # { 'filename': '28503151_5b5b7ec140_b.jpg',
-        #   'regions': {
-        #       '0': {
-        #           'region_attributes': {},
-        #           'shape_attributes': {
-        #               'all_points_x': [...],
-        #               'all_points_y': [...],
-        #               'name': 'polygon'}},
-        #       ... more regions ...
-        #   },
-        #   'size': 100202
-        # }
-        # We mostly care about the x and y coordinates of each region
         annotations = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
         annotations = list(annotations.values())  # don't need the dict keys
 
@@ -155,7 +141,6 @@ class MickeyDataset(utils.Dataset):
             # Get the x, y coordinaets of points of the polygons that make up
             # the outline of each object instance. There are stores in the
             # shape_attributes (see json format above)
-            print(type(a['regions']))
             polygons = [r['shape_attributes'] for r in a['regions']]
 
             # load_mask() needs the image size to convert polygons to masks.
@@ -226,80 +211,8 @@ def train(model):
     print("Training network heads")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
-                epochs=30,
+                epochs=150,
                 layers='heads')
-
-
-def color_splash(image, mask):
-    """Apply color splash effect.
-    image: RGB image [height, width, 3]
-    mask: instance segmentation mask [height, width, instance count]
-
-    Returns result image.
-    """
-    # Make a grayscale copy of the image. The grayscale copy still
-    # has 3 RGB channels, though.
-    gray = skimage.color.gray2rgb(skimage.color.rgb2gray(image)) * 255
-    # Copy color pixels from the original color image where mask is set
-    if mask.shape[-1] > 0:
-        # We're treating all instances as one, so collapse the mask into one layer
-        mask = (np.sum(mask, -1, keepdims=True) >= 1)
-        splash = np.where(mask, image, gray).astype(np.uint8)
-    else:
-        splash = gray.astype(np.uint8)
-    return splash
-
-
-def detect_and_color_splash(model, image_path=None, video_path=None):
-    assert image_path or video_path
-
-    # Image or video?
-    if image_path:
-        # Run model detection and generate the color splash effect
-        print("Running on {}".format(args.image))
-        # Read image
-        image = skimage.io.imread(args.image)
-        # Detect objects
-        r = model.detect([image], verbose=1)[0]
-        # Color splash
-        splash = color_splash(image, r['masks'])
-        # Save output
-        file_name = "splash_{:%Y%m%dT%H%M%S}.png".format(datetime.datetime.now())
-        skimage.io.imsave(file_name, splash)
-    elif video_path:
-        import cv2
-        # Video capture
-        vcapture = cv2.VideoCapture(video_path)
-        width = int(vcapture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(vcapture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = vcapture.get(cv2.CAP_PROP_FPS)
-
-        # Define codec and create video writer
-        file_name = "splash_{:%Y%m%dT%H%M%S}.avi".format(datetime.datetime.now())
-        vwriter = cv2.VideoWriter(file_name,
-                                  cv2.VideoWriter_fourcc(*'MJPG'),
-                                  fps, (width, height))
-
-        count = 0
-        success = True
-        while success:
-            print("frame: ", count)
-            # Read next image
-            success, image = vcapture.read()
-            if success:
-                # OpenCV returns images as BGR, convert to RGB
-                image = image[..., ::-1]
-                # Detect objects
-                r = model.detect([image], verbose=0)[0]
-                # Color splash
-                splash = color_splash(image, r['masks'])
-                # RGB -> BGR to save image to video
-                splash = splash[..., ::-1]
-                # Add image to video writer
-                vwriter.write(splash)
-                count += 1
-        vwriter.release()
-    print("Saved to ", file_name)
 
 
 ############################################################
@@ -316,7 +229,7 @@ if __name__ == '__main__':
                         metavar="<command>",
                         help="'train' or 'splash'")
     parser.add_argument('--dataset', required=False,
-                        metavar="/path/to/balloon/dataset/",
+                        metavar="/path/to/mickey/dataset/",
                         help='Directory of the Mickey dataset')
     parser.add_argument('--weights', required=True,
                         metavar="/path/to/weights.h5",
@@ -355,6 +268,10 @@ if __name__ == '__main__':
             IMAGES_PER_GPU = 1
         config = InferenceConfig()
     config.display()
+
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    set_session(tf.Session(config=tf_config))
 
     # Create model
     if args.command == "train":
