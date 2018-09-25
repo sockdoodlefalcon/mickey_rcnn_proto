@@ -74,7 +74,7 @@ class MickeyConfig(Config):
     NUM_CLASSES = 1 + 1  # Background + mickey
 
     # Number of training steps per epoch
-    STEPS_PER_EPOCH = 100
+    STEPS_PER_EPOCH = 166
 
     # Size of the top-down layers used to build the feature pyramid
     TOP_DOWN_PYRAMID_SIZE = 256
@@ -92,7 +92,7 @@ class MickeyConfig(Config):
     MINI_MASK_SHAPE = (56, 56)  # (height, width) of the mini-mask
 
     # Skip detections with < % confidence
-    DETECTION_MIN_CONFIDENCE = 0.51
+    DETECTION_MIN_CONFIDENCE = 0.75
 
     # Non-max suppression threshold to filter RPN proposals.
     # You can increase this during training to generate more propsals.
@@ -102,13 +102,18 @@ class MickeyConfig(Config):
     TRAIN_ROIS_PER_IMAGE = 512
 
     # Percent of positive ROIs used to train classifier/mask heads
-    ROI_POSITIVE_RATIO = 0.55
+    ROI_POSITIVE_RATIO = 0.33
 
     # Non-maximum suppression threshold for detection
-    DETECTION_NMS_THRESHOLD = 0.1
+    DETECTION_NMS_THRESHOLD = 0.3
 
     # Learning rate 
-    LEARNING_RATE = 0.000025
+    LEARNING_RATE = 0.0005
+
+    # ROIs kept after non-maximum suppression (training and inference)
+    POST_NMS_ROIS_TRAINING = 2048
+    POST_NMS_ROIS_INFERENCE = 2048
+
 
 ############################################################
 #  Dataset
